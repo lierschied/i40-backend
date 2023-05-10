@@ -1,8 +1,9 @@
 secret: "1wfagn2k4thowgnajökgbq3g)%=§%325qfdgq3hbnbcnxygffgh32rfwev##"
 restapi:
-  base_url: "http://127.0.0.1"
+  # base_url: "http://127.0.0.1"
+  base_url: "http://10.3.0.71"
   postfix: "mhubx-cc/module/juwi/action"
-  port: 8001
+  port: 8080
   username: "system"
   password: "changeit"
 

@@ -10,6 +10,7 @@ pub struct AppState {
 pub struct RestApi {
     pub base_url: String,
     pub port: String,
+    pub postfix: String,
     pub username: String,
     pub password: String,
 }

@@ -4,7 +4,10 @@ use crate::config::{AppState, RestApi};
 
 //constructs the url endpoint for the MHubx RestAPI
 fn get_endpoint(restapi: &RestApi, path: impl std::fmt::Display) -> String {
-    format!("{}:{}{}", restapi.base_url, restapi.port, path)
+    format!(
+        "{}:{}/{}{}",
+        restapi.base_url, restapi.port, restapi.postfix, path
+    )
 }
 
 //construcss the request and adds basic auth headers
@@ -13,6 +16,7 @@ fn get_endpoint(restapi: &RestApi, path: impl std::fmt::Display) -> String {
 fn get(restapi: &RestApi, path: impl std::fmt::Display) -> reqwest::RequestBuilder {
     let client = reqwest::Client::new();
     let url = get_endpoint(&restapi, path);
+    println!("{}", &url);
     client
         .get(url)
         .basic_auth(&restapi.username, Some(&restapi.password))
@@ -29,7 +33,7 @@ async fn get_measurments(state: web::Data<AppState>) -> HttpResponse {
     .send()
     .await
     .unwrap();
-
+    dbg!(&resp);
     let json: serde_json::value::Value = resp.json().await.unwrap();
     HttpResponse::Ok().json(json)
 }
