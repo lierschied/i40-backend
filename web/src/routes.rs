@@ -1,5 +1,6 @@
 use crate::middleware::authorization::JWTAuthorization;
-use actix_web::{get, web, HttpResponse};
+use actix_web::{get, post, web, HttpResponse};
+use serde::Deserialize;
 use surrealdb::{engine::remote::ws::Client, sql::Thing, Surreal};
 
 pub fn config(app: &mut web::ServiceConfig) {
@@ -7,6 +8,7 @@ pub fn config(app: &mut web::ServiceConfig) {
         web::scope("/api/v1")
             .wrap(JWTAuthorization)
             .service(crate::auth::decode)
+            .service(get_stations)
             .service(get_sensor_values)
             .service(get_sensor)
             .service(get_sensors)
@@ -24,7 +26,22 @@ struct Sensor {
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct SensorValue {
+    id: Thing,
+    sensor: Thing,
     value: String,
+    server_timestamp: String,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+struct Station {
+    id: Thing,
+    name: String,
+}
+
+#[get("stations")]
+async fn get_stations(db: web::Data<Surreal<Client>>) -> HttpResponse {
+    let stations: Vec<Station> = db.select("station").await.unwrap();
+    HttpResponse::Ok().json(stations)
 }
 
 #[get("/sensor/{sensor}")]
@@ -43,8 +60,8 @@ async fn get_sensor(sensor: web::Path<String>, db: web::Data<Surreal<Client>>) -
 async fn get_sensors(station: web::Path<String>, db: web::Data<Surreal<Client>>) -> HttpResponse {
     let station = station.into_inner();
     let sensors: Vec<Sensor> = db
-        .query("SELECT *, (SELECT value FROM sensor_value WHERE sensor.station.name = $name) as values FROM sensor WHERE station.name = $name AND values.sensor.id = sensor.id")
-        .bind(("name", &station))
+        .query("SELECT *, (SELECT * FROM sensor_value WHERE sensor.id = $parent.id ORDER BY server_timestamp DESC LIMIT 1) as values FROM sensor WHERE station.name = $station;;")
+        .bind(("station", &station))
         .await
         .unwrap()
         .take(0)
@@ -53,17 +70,30 @@ async fn get_sensors(station: web::Path<String>, db: web::Data<Surreal<Client>>)
     HttpResponse::Ok().json(sensors)
 }
 
-#[get("/sensor/{sensor}/values")]
+#[derive(Deserialize)]
+struct SensorQuery {
+    sensor: String,
+    min: String,
+    max: String,
+}
+
+#[post("/sensor/{sensor}/values")]
 async fn get_sensor_values(
-    sensor: web::Path<String>,
+    json: web::Json<SensorQuery>,
     db: web::Data<Surreal<Client>>,
 ) -> HttpResponse {
-    let sensors: Vec<SensorValue> = db
-        .query("SELECT * FROM sensor_value WHERE sensor.display_name = $sensor")
-        .bind(("sensor", sensor.into_inner()))
+    let thing = Thing::from(("sensor".to_string(), json.sensor.clone()));
+    let sensor: Option<Sensor> = db
+        .query(
+            "SELECT *, (SELECT * FROM $sensor->hasValue->sensor_value WHERE server_timestamp < time::now() - <duration> $min AND server_timestamp > time::now() - <duration> $max ORDER BY server_timestamp ASC) AS values FROM $sensor",
+        )
+        .bind(("sensor", thing))
+        .bind(("min", &json.min))
+        .bind(("max", &json.max))
         .await
         .unwrap()
         .take(0)
         .unwrap();
-    HttpResponse::Ok().json(sensors)
+
+    HttpResponse::Ok().json(sensor)
 }

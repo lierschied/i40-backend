@@ -10,10 +10,11 @@ struct User {
     email: String,
     name: String,
     jwt: Option<String>,
+    icon: Option<String>,
 }
 
 #[derive(Deserialize)]
-pub struct FormData {
+pub struct SignInFormData {
     email: String,
     password: String,
 }
@@ -22,7 +23,7 @@ pub struct FormData {
 pub async fn sign_in(
     app_state: web::Data<AppState>,
     db: web::Data<Surreal<Client>>,
-    form: web::Form<FormData>,
+    form: web::Form<SignInFormData>,
 ) -> HttpResponse {
     let user: Option<User> = db.query("SELECT * FROM user WHERE email = $email AND crypto::argon2::compare(password, $password)")
     .bind(("email", form.email.clone()))
@@ -31,6 +32,42 @@ pub async fn sign_in(
     .unwrap()
     .take(0)
     .unwrap();
+
+    if user.is_none() {
+        return HttpResponse::NotFound().body("Wrong email or password");
+    }
+
+    let mut user = user.unwrap();
+    user.jwt = Some(crate::auth::generate_token(
+        app_state.secret.clone(),
+        user.email.clone(),
+        1,
+    ));
+    HttpResponse::Ok().json(user)
+}
+
+#[derive(Deserialize)]
+pub struct UserFormData {
+    user: String,
+    name: String,
+    icon: String,
+}
+
+#[post("/user/update")]
+pub async fn update_user(
+    app_state: web::Data<AppState>,
+    db: web::Data<Surreal<Client>>,
+    form: web::Form<UserFormData>,
+) -> HttpResponse {
+    let user: Option<User> = db
+        .query("UPDATE $user SET name = $name, icon = $icon")
+        .bind(("user", &form.user))
+        .bind(("name", &form.name))
+        .bind(("icon", &form.icon))
+        .await
+        .unwrap()
+        .take(0)
+        .unwrap();
 
     if user.is_none() {
         return HttpResponse::NotFound().body("Wrong email or password");

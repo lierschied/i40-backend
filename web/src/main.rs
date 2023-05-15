@@ -1,3 +1,4 @@
+use actix_cors::Cors;
 use actix_files::NamedFile;
 use std::path::Path;
 mod api;
@@ -14,17 +15,6 @@ use surrealdb::{
     sql::Thing,
     Surreal,
 };
-
-// pub struct AppState {
-//     secret: String,
-//     restapi: RestApi,
-// }
-//
-// struct RestApi {
-//     base_url: String,
-//     username: String,
-//     password: String,
-// }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -45,9 +35,11 @@ async fn main() -> std::io::Result<()> {
 
     let app_state = web::Data::new(app_state);
     HttpServer::new(move || {
+        let cors = Cors::permissive();
         App::new()
             .app_data(web::Data::new(db.clone()))
             .app_data(app_state.clone())
+            .wrap(cors)
             .service(app::user::sign_in)
             .service(get_person)
             .service(create_person)
@@ -55,7 +47,7 @@ async fn main() -> std::io::Result<()> {
             .configure(routes::config)
             .service(single_page_app)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }

@@ -4,45 +4,70 @@ USE NS main;
 DEFINE DATABASE main;
 USE DB main;
 
+
+--
+-- Station
+--
 DEFINE TABLE station SCHEMAFULL;
+-- Station fields
+DEFINE FIELD name ON station TYPE string ASSERT $value != NONE;
 
-DEFINE FIELD name ON station TYPE string;
 
--- 
+--
+-- Sensor
+--
 DEFINE TABLE sensor SCHEMAFULL;
+--Sensor fields
+DEFINE FIELD station ON sensor TYPE record(station) ASSERT $value != NONE;
+DEFINE FIELD display_name ON sensor TYPE string ASSERT $value != NONE;
 
-DEFINE FIELD node ON sensor TYPE string;
-DEFINE FIELD station ON sensor TYPE record(station);
-DEFINE FIELD display_name ON sensor TYPE string;
 
+--
+-- Sensor_value
 --
 DEFINE TABLE sensor_value SCHEMAFULL;
+-- Sensor_value fields
+DEFINE FIELD sensor ON sensor_value TYPE record(sensor) ASSERT $value != NONE;
+DEFINE FIELD value ON sensor_value TYPE string ASSERT $value != NONE;
+-- DEFINE FIELD source_timestamp ON sensor_value TYPE datetime;
+DEFINE FIELD server_timestamp ON sensor_value TYPE datetime ASSERT $value != NONE;
 
-DEFINE FIELD sensor ON sensor_value TYPE record(sensor);
-DEFINE FIELD value ON sensor_value TYPE string;
-DEFINE FIELD source_timestamp ON sensor_value TYPE datetime;
-DEFINE FIELD server_timestamp ON sensor_value TYPE datetime;
 
 --
+-- hasValue RELATION
+--
+DEFINE TABLE hasValue SCHEMAFULL;
+DEFINE FIELD in ON hasValue TYPE record(sensor);
+DEFINE FIELD out ON hasValue TYPE record(sensor_value);
+
+
+--
+-- user
+--
 DEFINE TABLE user SCHEMAFULL
+-- only for 
     PERMISSIONS
         FOR select, update WHERE id = $auth.id, 
         FOR create, delete NONE;
 DEFINE FIELD name ON user TYPE string;
-DEFINE FIELD email ON user TYPE string;
-DEFINE FIELD password ON user TYPE string;
+DEFINE FIELD email ON user TYPE string ASSERT $value != NONE;
+DEFINE FIELD password ON user TYPE string ASSERT $value != NONE;
+DEFINE FIELD icon ON user TYPE string;
 DEFINE INDEX idx_user ON user COLUMNS email UNIQUE;
+
+
+--
+-- Functions
+--
+DEFINE FUNCTION fn::slice_array($arr: array, $start: int, $end: int) {
+    RETURN SELECT * FROM $arr LIMIT BY $end START AT $start;
+};
 
 
 --
 -- Insert dummy data
 --
-LET $station = INSERT INTO station (name) VALUES ('Palettenlager');
-LET $sensor = INSERT INTO sensor (display_name, station) VALUES ('Füllstand', $station.id);
+INSERT INTO station (name) VALUES ('palettenlager');
+INSERT INTO station (name) VALUES ('presswerk');
 
-INSERT INTO sensor_value (sensor, value) VALUES ($sensor.id, 12344);
-INSERT INTO sensor_value (sensor, value) VALUES ($sensor.id, 12345);
-INSERT INTO sensor_value (sensor, value) VALUES ($sensor.id, 12399);
-INSERT INTO sensor_value (sensor, value) VALUES ($sensor.id, 12300);
-
-CREATE user SET email = 'test@mail.de', name = 'Hugo', password = crypto::argon2::generate('1234')
+CREATE user SET email = 'lucy@cyber.night', name = 'Lucy', password = crypto::argon2::generate('1234'), icon = 'https://www.egames.news/__export/1677000358920/sites/debate/img/2023/02/21/lucy_cyberpunk_edgerunners.jpg_172596871.jpg';
