@@ -666,6 +666,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "surrealdb",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2948,6 +2957,7 @@ dependencies = [
  "actix-web-actors",
  "actix-web-httpauth",
  "chrono",
+ "common",
  "futures-util",
  "jsonwebtoken",
  "reqwest",

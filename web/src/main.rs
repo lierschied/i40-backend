@@ -8,13 +8,8 @@ mod config;
 mod middleware;
 mod routes;
 
-use actix_web::{get, post, web, App, HttpResponse, HttpServer};
-use surrealdb::{
-    engine::remote::ws::{Client, Ws},
-    opt::auth::Root,
-    sql::Thing,
-    Surreal,
-};
+use actix_web::{get, web, App, HttpServer};
+use surrealdb::{engine::remote::ws::Ws, opt::auth::Root, Surreal};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -29,9 +24,12 @@ async fn main() -> std::io::Result<()> {
         password: "root",
     })
     .await
-    .unwrap();
+    .expect("Unable to sigin to the database");
 
-    db.use_ns("main").use_db("main").await.unwrap();
+    db.use_ns("main")
+        .use_db("main")
+        .await
+        .expect("Either namespace or database main does not exist");
 
     let app_state = web::Data::new(app_state);
     HttpServer::new(move || {
@@ -41,9 +39,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state.clone())
             .wrap(cors)
             .service(app::user::sign_in)
-            .service(get_person)
-            .service(create_person)
-            .service(get_persons)
             .configure(routes::config)
             .service(single_page_app)
     })
@@ -59,52 +54,4 @@ async fn single_page_app(file_name: web::Path<String>) -> Result<NamedFile, acti
         file_path = "../frontend/dist/index.html".to_string();
     }
     Ok(NamedFile::open(file_path)?)
-}
-
-trait DbData<T> {
-    fn get(id: String, db: &Surreal<Client>) -> Option<T>;
-    fn all() -> Vec<T>;
-    fn create(self: Self) -> T;
-    fn update(self: Self) -> T;
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct Person {
-    id: Option<Thing>,
-    name: String,
-}
-
-#[derive(serde::Deserialize, Debug)]
-struct PersonInfo {
-    name: String,
-}
-
-#[post("/person")]
-async fn create_person(
-    db: web::Data<Surreal<Client>>,
-    info: web::Json<PersonInfo>,
-) -> HttpResponse {
-    let r: Person = db
-        .create("person")
-        .content(Person {
-            id: None,
-            name: info.name.clone(),
-        })
-        .await
-        .unwrap();
-    dbg!(&r);
-    HttpResponse::Ok().json(r)
-}
-
-#[get("/persons")]
-async fn get_persons(db: web::Data<Surreal<Client>>) -> HttpResponse {
-    let persons: Vec<Person> = db.select("person").await.unwrap();
-    HttpResponse::Ok().json(persons)
-}
-
-#[get("/person/{id}")]
-async fn get_person(db: web::Data<Surreal<Client>>, info: web::Path<String>) -> HttpResponse {
-    let id = info.into_inner();
-    let person: Option<Person> = db.select(("person", id)).await.unwrap();
-    HttpResponse::Ok().json(person)
 }

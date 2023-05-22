@@ -1,2 +1,2 @@
 [workspace]
-members = ["web", "mqtt"]
+members = ["web", "mqtt", "common"]

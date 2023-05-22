@@ -1,5 +1,6 @@
 use crate::middleware::authorization::JWTAuthorization;
 use actix_web::{get, post, web, HttpResponse};
+use common;
 use serde::Deserialize;
 use surrealdb::{engine::remote::ws::Client, sql::Thing, Surreal};
 
@@ -32,40 +33,33 @@ struct SensorValue {
     server_timestamp: String,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-struct Station {
-    id: Thing,
-    name: String,
-}
-
 #[get("stations")]
 async fn get_stations(db: web::Data<Surreal<Client>>) -> HttpResponse {
-    let stations: Vec<Station> = db.select("station").await.unwrap();
+    let stations = common::Station::get_all(&db)
+        .await
+        .expect("Error retrieving stations");
     HttpResponse::Ok().json(stations)
 }
 
 #[get("/sensor/{sensor}")]
-async fn get_sensor(sensor: web::Path<String>, db: web::Data<Surreal<Client>>) -> HttpResponse {
-    let sensor: Option<Sensor> = db
-        .query("SELECT * FROM sensor WHERE display_name = $name")
-        .bind(("name", sensor.into_inner()))
+async fn get_sensor(sensor_id: web::Path<String>, db: web::Data<Surreal<Client>>) -> HttpResponse {
+    let sensor_id = sensor_id.into_inner();
+    let sensor: Option<common::Sensor> = common::Sensor::get(&db, sensor_id)
         .await
-        .unwrap()
-        .take(0)
-        .unwrap();
+        .expect("Error retrieving sensor from database");
+
     HttpResponse::Ok().json(sensor)
 }
 
 #[get("/station/{station}/sensors")]
-async fn get_sensors(station: web::Path<String>, db: web::Data<Surreal<Client>>) -> HttpResponse {
-    let station = station.into_inner();
-    let sensors: Vec<Sensor> = db
-        .query("SELECT *, (SELECT * FROM sensor_value WHERE sensor.id = $parent.id ORDER BY server_timestamp DESC LIMIT 1) as values FROM sensor WHERE station.name = $station;;")
-        .bind(("station", &station))
+async fn get_sensors(
+    station_id: web::Path<String>,
+    db: web::Data<Surreal<Client>>,
+) -> HttpResponse {
+    let station_id = station_id.into_inner();
+    let sensors: Vec<common::Sensor> = common::Sensor::get_by_station(&db, station_id)
         .await
-        .unwrap()
-        .take(0)
-        .unwrap();
+        .expect("Error retrieving sensors by station");
 
     HttpResponse::Ok().json(sensors)
 }
