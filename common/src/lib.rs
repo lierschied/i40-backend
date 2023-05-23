@@ -65,7 +65,11 @@ impl Station {
 
     /// Returns a station by id or None if the id does not exist
     pub async fn get(db: &DB, id: String) -> Result<Option<Self>, surrealdb::Error> {
-        db.select(Thing::from(("statiob", id.as_str()))).await
+        db.select(Thing::from(("station", id.as_str()))).await
+    }
+
+    pub fn get_id(&self) -> &Thing {
+        &self.id
     }
 }
 
@@ -74,10 +78,11 @@ impl Station {
 /// # Example
 ///
 /// ```
-/// let sensor = Sensor::new("dosenfuellstand");
+/// let sensor = Sensor::new("dosenfuellstand", Thing::from(("station", "palettenlager")));
 ///
 /// let answer = Sensor {
 ///     id: Thing::from(("sensor", "dosenfuellstand")),
+///     station: Thing::from(("station", "palettenlager")),
 ///     display_name: "dosenfuellstand".to_owned(),
 ///     values: None,
 /// };
@@ -87,25 +92,39 @@ impl Station {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Sensor {
     id: Thing,
+    station: Thing,
     display_name: String,
     values: Option<Vec<SensorValue>>,
 }
 
 impl Sensor {
-    pub fn new(name: &'static str) -> Self {
+    /// Creates a new Sensor struct
+    pub fn new(name: String, station: Thing) -> Self {
         Sensor {
-            id: Thing::from(("sensor", name)),
+            id: Thing::from(("sensor", name.as_str())),
+            station,
             display_name: name.into(),
             values: None,
         }
     }
 
+    /// Creates a new Sensor struct an saves it to the database
+    pub async fn create(
+        db: &DB,
+        name: String,
+        station: Thing,
+    ) -> Result<Option<Self>, surrealdb::Error> {
+        db.create("sensor").content(Self::new(name, station)).await
+    }
+
+    /// Retrive a single sensor, without values by its id
     pub async fn get(db: &DB, id: String) -> Result<Option<Self>, surrealdb::Error> {
         db.select(Thing::from(("sensor", id.as_str()))).await
     }
 
+    /// Retrive a list of sensors, without the latest value by station id
     pub async fn get_by_station(db: &DB, id: String) -> Result<Vec<Self>, surrealdb::Error> {
-        db.query("SELECT *, (SELECT * FROM sensor_value:[$parent.id, NONE].. ORDER BY server_timestamp DESC LIMIT 1 ) AS values FROM sensor WHERE station = $station;")
+        db.query("SELECT *, (SELECT * FROM sensor_value:[$parent.id, NONE]..[$parent.id, time::now()] ORDER BY server_timestamp ASC LIMIT 1 ) AS values FROM sensor WHERE station = $station;")
             .bind(("station", Thing::from(("station", id.as_str()))))
             .await
             .expect("Error during query execution")
@@ -117,7 +136,7 @@ impl Sensor {
     /// # Example
     ///
     /// ```
-    /// let sensor: Option<Sensor> = Sensor::get_values(&db, "dosenfuellstand");
+    /// let sensor: Option<Sensor> = Sensor::get_values(&db, "dosenfuellstand").await.unwrap();
     /// ```
     pub async fn get_with_values(db: &DB, id: String) -> Result<Option<Self>, surrealdb::Error> {
         db.query("SELECT *, (SELECT * FROM sensor_value:[$sensor, NONE]..) AS values FROM $sensor")
@@ -132,10 +151,10 @@ impl Sensor {
     /// # Example
     ///
     /// ```
-    /// let time_period = TimeRange::new(chrono::Duration::Hour(5), Some);
-    /// let sensor: Option<Sensor> = Sensor::get_values_from(&db, "dosenfuellstand", Utc::now());
+    /// let time_period = TimeRange::new(chrono::Duration::Hour(5), Utc::now());
+    /// let sensor: Option<Sensor> = Sensor::get_values_within_timeperiod(&db, "dosenfuellstand", time_period).await.unwrap();
     /// ```
-    pub async fn get_values_from(
+    pub async fn get_values_within_timeperiod(
         db: &DB,
         id: String,
         time_period: TimePeriod,
@@ -147,6 +166,11 @@ impl Sensor {
             .await
             .expect("Error during query")
             .take(0)
+    }
+
+    /// Returns the id of this [`Sensor`].
+    pub fn get_id(&self) -> &Thing {
+        &self.id
     }
 }
 
@@ -230,26 +254,48 @@ impl ToDatetime for chrono::DateTime<Utc> {
     }
 }
 
+/// A struct to repesent a single value at a given time from a sensor
+///
+/// # Example
+///
+/// ```
+/// let sensor = Thing::from(("sensor", "doesnfuellstand"));
+/// let value = SensorValue::new("12", sensor);
+/// ```
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SensorValue {
     id: Thing,
+    sensor: Thing,
     value: String,
     server_timestamp: Datetime,
 }
 
 impl SensorValue {
+    /// Creates a new sensor value struct
     pub fn new(value: String, sensor: Thing) -> Self {
         let server_timestamp = Datetime(Utc::now());
         SensorValue {
             id: Thing::from((
                 "sensor_value".to_owned(),
                 Id::from(vec![
-                    Value::Thing(sensor),
+                    Value::Thing(sensor.clone()),
                     Value::Datetime(server_timestamp.clone()),
                 ]),
             )),
+            sensor,
             value,
             server_timestamp,
         }
+    }
+
+    /// Creates a new sensor_value struct and saves it to the database
+    pub async fn create(
+        db: &DB,
+        value: String,
+        sensor: Thing,
+    ) -> Result<Option<Self>, surrealdb::Error> {
+        db.create("sensor_value")
+            .content(Self::new(value, sensor))
+            .await
     }
 }

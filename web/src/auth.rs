@@ -1,14 +1,21 @@
+//! # web::auth
+//!
+//! `web::auth` is a module containing everything needed for the JWTAuthorization middleware
+//!
+
 use actix_web::{get, web};
 use serde::{Deserialize, Serialize};
 
 use crate::config::AppState;
 
+/// A helper struct to send a Error response upon failed authorization
 #[derive(Serialize, Deserialize)]
 struct ErrorResponse {
     error: String,
     code: usize,
 }
 
+/// This is actual JWT payload
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
     pub sub: usize,
@@ -17,6 +24,7 @@ pub struct Claims {
     pub exp: usize,
 }
 
+/// this function generates the actual JWT encrypted with a given secret
 pub fn generate_token(secret: String, username: String, user_id: i32) -> String {
     let sub: usize = user_id as usize;
     let exp: usize = (chrono::Utc::now() + chrono::Duration::days(1)).timestamp() as usize;
@@ -35,6 +43,7 @@ pub fn generate_token(secret: String, username: String, user_id: i32) -> String 
     .unwrap()
 }
 
+/// enpoint to check/validate the Authorization header/JWT
 #[get("/token")]
 async fn decode(
     req: actix_web::HttpRequest,
@@ -63,4 +72,3 @@ async fn decode(
         }),
     }
 }
-

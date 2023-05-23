@@ -25,7 +25,7 @@ DEFINE FIELD display_name ON sensor TYPE string ASSERT $value != NONE;
 --
 -- Sensor_value
 --
-DEFINE TABLE sensor_value SCHEMAFULL;
+DEFINE TABLE sensor_value SCHEMALESS;
 -- Sensor_value fields
 DEFINE FIELD sensor ON sensor_value TYPE record(sensor) ASSERT $value != NONE;
 DEFINE FIELD value ON sensor_value TYPE string ASSERT $value != NONE;
@@ -67,7 +67,6 @@ DEFINE FUNCTION fn::slice_array($arr: array, $start: int, $end: int) {
 --
 -- Insert dummy data
 --
-INSERT INTO station (name) VALUES ('palettenlager');
-INSERT INTO station (name) VALUES ('presswerk');
-
+CREATE station CONTENT {id: station:palettenlager, name: 'palettenlager'};
+CREATE station CONTENT {id : station:presswerk, name: 'presswerk'};
 CREATE user SET email = 'lucy@cyber.night', name = 'Lucy', password = crypto::argon2::generate('1234'), icon = 'https://www.egames.news/__export/1677000358920/sites/debate/img/2023/02/21/lucy_cyberpunk_edgerunners.jpg_172596871.jpg';

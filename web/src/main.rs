@@ -1,3 +1,15 @@
+//! # web
+//!
+//! `web` is a the central http-web server
+//! # Example
+//! Make sure the surrealdb database is running prior to starting the
+//! web server!
+//!
+//! ```text
+//! # Starting the web server
+//! > cargo run -p web
+//! ```
+
 use actix_cors::Cors;
 use actix_files::NamedFile;
 use std::path::Path;
@@ -13,9 +25,10 @@ use surrealdb::{engine::remote::ws::Ws, opt::auth::Root, Surreal};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let config = crate::config::Config::load();
     let app_state = crate::config::AppState::load();
 
-    let db = Surreal::new::<Ws>("127.0.0.1:8000")
+    let db = Surreal::new::<Ws>(format!("{}:{}", config.db.address, config.db.port))
         .await
         .expect("Unable to connect to database");
 
@@ -42,11 +55,18 @@ async fn main() -> std::io::Result<()> {
             .configure(routes::config)
             .service(single_page_app)
     })
-    .bind(("0.0.0.0", 8080))?
+    .bind((config.web.address.as_str(), config.web.port))?
     .run()
     .await
 }
 
+/// If no route could be matched, the server tries to find a file instead.
+/// E.g. : http://127.0.0.1:8080/my_script.js -> could return a javascript file, if its present
+/// If there is no file to be found, the server will return the Vue.js app instead.
+///
+/// # Errors
+///
+/// This function will return an error if the file cannot be opend
 #[get("{filename:.*}")]
 async fn single_page_app(file_name: web::Path<String>) -> Result<NamedFile, actix_web::Error> {
     let mut file_path = format!("../frontend/dist/{}", file_name.into_inner());

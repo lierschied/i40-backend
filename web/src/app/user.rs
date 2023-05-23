@@ -1,9 +1,17 @@
-use actix_web::{get, post, web, HttpResponse};
-use serde::{Deserialize, Serialize};
+//! # web::user
+//!
+//! `web::user` is a module to handle all interactions for a user
+//!
+//! # Example
+//!
+
+use actix_web::{post, web, HttpResponse};
+use serde::Deserialize;
 use surrealdb::{engine::remote::ws::Client, sql::Thing, Surreal};
 
 use crate::config::AppState;
 
+/// A struct containing all necessary user data
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct User {
     id: Option<Thing>,
@@ -13,12 +21,14 @@ struct User {
     icon: Option<String>,
 }
 
+/// helper struct to deserialize the login form
 #[derive(Deserialize)]
 pub struct SignInFormData {
     email: String,
     password: String,
 }
 
+/// route to login a existing user
 #[post("/signin")]
 pub async fn sign_in(
     app_state: web::Data<AppState>,
@@ -46,6 +56,7 @@ pub async fn sign_in(
     HttpResponse::Ok().json(user)
 }
 
+/// helper struct to deserialize the User update form
 #[derive(Deserialize)]
 pub struct UserFormData {
     user: String,
@@ -53,6 +64,7 @@ pub struct UserFormData {
     icon: String,
 }
 
+/// endpoint to update the user data
 #[post("/user/update")]
 pub async fn update_user(
     app_state: web::Data<AppState>,
@@ -82,6 +94,8 @@ pub async fn update_user(
     HttpResponse::Ok().json(user)
 }
 
+/// endpoint to register a new user
+/// !!!dummy implementation
 #[post("/signup")]
 pub async fn sign_up(db: web::Data<Surreal<Client>>) -> HttpResponse {
     let r = db

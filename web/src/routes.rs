@@ -1,9 +1,15 @@
+//! # web::routes
+//!
+//! `web::routes` is the central module for defining the api routes
+//!
+
 use crate::middleware::authorization::JWTAuthorization;
 use actix_web::{get, post, web, HttpResponse};
 use common;
 use serde::Deserialize;
-use surrealdb::{engine::remote::ws::Client, sql::Thing, Surreal};
+use surrealdb::{engine::remote::ws::Client, Surreal};
 
+/// defining all api routes behind a JWTAuthorization middleware
 pub fn config(app: &mut web::ServiceConfig) {
     app.service(
         web::scope("/api/v1")
@@ -18,21 +24,7 @@ pub fn config(app: &mut web::ServiceConfig) {
     );
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-struct Sensor {
-    id: Thing,
-    display_name: String,
-    values: Option<Vec<SensorValue>>,
-}
-
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
-struct SensorValue {
-    id: Thing,
-    sensor: Thing,
-    value: String,
-    server_timestamp: String,
-}
-
+/// endpoint to retrieve all stations
 #[get("stations")]
 async fn get_stations(db: web::Data<Surreal<Client>>) -> HttpResponse {
     let stations = common::Station::get_all(&db)
@@ -41,6 +33,7 @@ async fn get_stations(db: web::Data<Surreal<Client>>) -> HttpResponse {
     HttpResponse::Ok().json(stations)
 }
 
+/// endpoint to retrieve a sensor
 #[get("/sensor/{sensor}")]
 async fn get_sensor(sensor_id: web::Path<String>, db: web::Data<Surreal<Client>>) -> HttpResponse {
     let sensor_id = sensor_id.into_inner();
@@ -51,6 +44,7 @@ async fn get_sensor(sensor_id: web::Path<String>, db: web::Data<Surreal<Client>>
     HttpResponse::Ok().json(sensor)
 }
 
+/// endpoint to retrive all sensors with the latest value for a given station
 #[get("/station/{station}/sensors")]
 async fn get_sensors(
     station_id: web::Path<String>,
@@ -64,30 +58,38 @@ async fn get_sensors(
     HttpResponse::Ok().json(sensors)
 }
 
+/// helper struct to Deserialize the payload
 #[derive(Deserialize)]
 struct SensorQuery {
     sensor: String,
-    min: String,
-    max: String,
+    to: String,
+    from: String,
 }
 
+/// endpoint to retrive all values for a given sensor
 #[post("/sensor/{sensor}/values")]
 async fn get_sensor_values(
     json: web::Json<SensorQuery>,
     db: web::Data<Surreal<Client>>,
 ) -> HttpResponse {
-    let thing = Thing::from(("sensor".to_string(), json.sensor.clone()));
-    let sensor: Option<Sensor> = db
-        .query(
-            "SELECT *, (SELECT * FROM $sensor->hasValue->sensor_value WHERE server_timestamp < time::now() - <duration> $min AND server_timestamp > time::now() - <duration> $max ORDER BY server_timestamp ASC) AS values FROM $sensor",
-        )
-        .bind(("sensor", thing))
-        .bind(("min", &json.min))
-        .bind(("max", &json.max))
-        .await
-        .unwrap()
-        .take(0)
-        .unwrap();
+    let to = chrono::Duration::minutes(
+        json.to
+            .parse::<i64>()
+            .expect("unable to convert min to int"),
+    );
+    let from = chrono::Duration::minutes(
+        json.from
+            .parse::<i64>()
+            .expect("unable to convert max to int"),
+    );
+
+    let sensor = common::Sensor::get_values_within_timeperiod(
+        &db,
+        json.sensor.clone(),
+        common::TimePeriod::between(from, to),
+    )
+    .await
+    .expect("unable to retrive sensor");
 
     HttpResponse::Ok().json(sensor)
 }

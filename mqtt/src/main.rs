@@ -1,12 +1,25 @@
-use chrono::serde::ts_seconds;
-use chrono::{DateTime, Utc};
+//! # mqtt
+//!
+//! `mqtt` is a service to collect and store sensor values from a mqtt endpoint.
+//! It can be run in a testing mode, when providing the argument `testing` to simulate sensor data.
+//!
+//! # Example
+//!
+//! ```text
+//! # Running in production
+//! > cargo run -p migrate
+//!
+//! # Running in testing
+//! > cargo run -p mqtt -- testing
+//! ```
+
 use rand::Rng;
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use std::env::args;
 use std::time::Duration;
 use tokio::{task, time};
 
-use surrealdb::{engine::remote::ws::Ws, opt::auth::Root, sql::Thing, Surreal};
+use surrealdb::{engine::remote::ws::Ws, opt::auth::Root, Surreal};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -68,50 +81,28 @@ async fn main() -> std::io::Result<()> {
                     let station_name = data.next();
                     let sensor_name = data.next().unwrap().replace("/", "_");
 
-                    let record: Option<Record> = db
-                        .query("SELECT * FROM sensor WHERE display_name = $name")
-                        .bind(("name", &sensor_name))
+                    let record = common::Sensor::get(&db, sensor_name.clone())
                         .await
-                        .unwrap()
-                        .take(0)
-                        .unwrap();
+                        .expect("Error while retrieving sensor");
 
                     match record {
                         Some(r) => {
-                            println!("found record! inserting; {:?}", &r.id);
-                            let res: Record = db
-                                .create("sensor_value")
-                                .content(SensorValue {
-                                    sensor: r.id.clone(),
-                                    value: val,
-                                    server_timestamp: Utc::now(),
-                                })
-                                .await
-                                .unwrap();
-                            db.query("RELATE $sensor->hasValue->$sensor_value")
-                                .bind(("sensor", &r.id))
-                                .bind(("sensor_value", &res.id))
-                                .await
-                                .unwrap();
+                            println!("found record! inserting; {:?}", &r.get_id());
+                            let _ = common::SensorValue::create(&db, val, r.get_id().clone()).await;
                         }
                         None => {
-                            let station: Option<Record> = db
-                                .query("SELECT id FROM station WHERE name = $name")
-                                .bind(("name", &station_name.unwrap()))
-                                .await
-                                .unwrap()
-                                .take(0)
-                                .unwrap_or(None);
-
-                            if station.is_some() {
-                                let _: Record = db
-                                    .create("sensor")
-                                    .content(CreateSensor {
-                                        display_name: sensor_name,
-                                        station: station.unwrap().id,
-                                    })
+                            let station =
+                                common::Station::get(&db, station_name.unwrap().to_owned())
                                     .await
                                     .unwrap();
+
+                            if station.is_some() {
+                                let _ = common::Sensor::create(
+                                    &db,
+                                    sensor_name,
+                                    station.unwrap().get_id().clone(),
+                                )
+                                .await;
                             }
                         }
                     }
@@ -121,29 +112,9 @@ async fn main() -> std::io::Result<()> {
             rumqttc::Event::Outgoing(_) => {}
         }
     }
-
-    // Ok(())
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct Record {
-    id: Thing,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct CreateSensor {
-    display_name: String,
-    station: Thing,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct SensorValue {
-    value: String,
-    sensor: Thing,
-    #[serde(with = "ts_seconds")]
-    server_timestamp: DateTime<Utc>,
-}
-
+/// when run in testing mode, this sensors will be simulated
 fn mock() -> [&'static str; 12] {
     [
         "/i40/fertigungsanlage/palettenlager/dosenfuellstand",

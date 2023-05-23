@@ -1,3 +1,8 @@
+//! # web::api
+//!
+//! `web::api` is the module handling all request to the MHubX rest API
+//!
+
 use actix_web::{get, web, HttpResponse};
 
 use crate::config::{AppState, RestApi};

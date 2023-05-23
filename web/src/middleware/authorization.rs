@@ -1,3 +1,7 @@
+//! # web::authorization::middleware
+//!
+//! `web::authorization::middleware` is a module containing the JWTAuthorization middleware
+//!
 use std::future::{ready, Ready};
 
 use actix_web::{
@@ -10,8 +14,10 @@ use futures_util::future::LocalBoxFuture;
 
 use crate::{auth::Claims, config::AppState};
 
+/// the actual middleware struct
 pub struct JWTAuthorization;
 
+/// implementation of the service factory for actix-web
 impl<S, B> Transform<S, ServiceRequest> for JWTAuthorization
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
@@ -29,10 +35,12 @@ where
     }
 }
 
+/// implementation of the middleware service
 pub struct JWTAuthorizationMiddleware<S> {
     service: S,
 }
 
+/// implementation of the axtix-web service model to handle request/response interaction
 impl<S, B> Service<ServiceRequest> for JWTAuthorizationMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
@@ -45,6 +53,9 @@ where
 
     forward_ready!(service);
 
+    /// this function handels the actual JWT authorization via a Bearer JWT token.
+    /// It decodes the JWT and validates it.
+    /// Upon failed decoding, a error resonse 401 is returned including the reason why it failed.
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let response = match req.headers().get(AUTHORIZATION) {
             Some(auth_header) => {
